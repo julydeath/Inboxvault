@@ -1,5 +1,10 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
 model User {
   id String @id
   email String @unique
@@ -28,6 +33,10 @@ model ScanJob {
   error String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  messageIds String[] @default([])
+  nextPageToken String?
   @@index([userId, createdAt])
 }
 model Attachment {

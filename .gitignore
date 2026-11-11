@@ -1,5 +1,9 @@
 node_modules
 .next
+.next-dev
+artifacts/
+test-results/
+playwright-report/
 .env
 .env.local
 *.log

@@ -1,60 +1,76 @@
-# InboxVault — developer preview
+# InboxVault
 
-Multi-user Gmail attachment indexer prototype, separate from Inspirex ATS.
+A private Gmail attachment workspace with a cinematic product website, an interactive sample environment, and authenticated file indexing and downloads.
 
-## IMPORTANT: policy and launch block
+## Try the interface
 
-Google's Workspace API user data policy disallows some one-time/manual email export applications. Before launching this concept publicly, confirm that the specific ongoing backup/productivity use case is eligible for Gmail API scopes. `gmail.readonly` is a restricted scope and can require verification and an external security assessment when restricted Gmail data is handled on servers. This prototype is for controlled testing only; it is **not** publicly launch-ready. See https://developers.google.com/workspace/workspace-api-user-data-developer-policy and https://developers.google.com/workspace/gmail/api/auth/scopes .
+```sh
+npm ci
+npm run dev
+```
 
-## Current features
-- Google sign-in with Gmail read-only consent (development/testing only)
-- Per-user encrypted Gmail refresh tokens (AES-256-GCM)
-- Historical search via Gmail search queries with page cursor + in-page offsets
-- Ten-message manually initiated test batches (no uncontrolled full-inbox scans)
-- Metadata index for PDF, DOCX, audio, video, images, archives and other file types
-- Search/filter attachment list and authenticated on-demand download for files up to 15 MB
-- Per-user data isolation in API queries
-- No paywall; no candidate/AI parsing yet
+Open `http://localhost:3000` for the product website or `http://localhost:3000/demo` for the interactive demo. The demo needs neither a database nor a Google account. It contains fictional files, simulated scan batches, and plain-text metadata receipts for sample downloads. Its state lives in the current browser tab’s session storage; reset it in Demo → Settings.
 
-## Setup
-1. Create a private PostgreSQL database.
-2. Create a Google Cloud project, enable Gmail API, configure OAuth consent in **Testing** and add explicitly authorized testers. Create a Web OAuth client. Add callback `http://localhost:3000/api/auth/callback/google`. Review Google policy before seeking public approval.
-3. Copy `.env.example` to `.env.local`. Set `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, and `TOKEN_ENCRYPTION_KEY` (`openssl rand -hex 32`). Do not commit `.env.local`.
-4. `npm install && npx prisma db push && npm run dev`
-5. Open http://localhost:3000 and sign in with an approved Google test user.
-6. Start a scan with `has:attachment`. Press **Process next 10 messages** repeatedly to test pagination and indexing.
+The landing page explains attachment extraction through a scroll-driven email-to-library sequence. Mobile and reduced-motion layouts provide a simplified presentation. Fonts are served locally.
 
-## Routes
-- `GET /api/jobs` and `POST /api/jobs` — list/create a scan
-- `POST /api/jobs/:id/run` — process next test batch (disabled in production)
-- `GET /api/files?search=&mime=&cursor=` — paginated file metadata
-- `GET /api/files/:id/download` — fetch attachment from Gmail on demand
+## Connect a real Gmail test account
 
-## Security and production TODOs
-- [ ] Google policy approval for actual product use case; OAuth verification/security assessment if needed
-- [ ] Production-grade durable queue/worker, database lease, idempotent message processing
-- [ ] Rate limit endpoints; enforce per-user quotas and query limits
-- [ ] Explicit data deletion, disconnect and revoke controls; retention policy
-- [ ] Proper protection against malicious files, content scanning, content disposition and archive bombs
-- [ ] Large file streaming/export to user-selected storage; ZIP delivery via background processing
-- [ ] Reauthorization/refresh-token lifecycle and reconnect UX
-- [ ] Pagination race and concurrency tests; Gmail quota/backoff handling
-- [ ] Email privacy policy, terms, security review, audit logging and abuse prevention
-- [ ] Automated tests + CI; monitoring and incident response
-- [ ] Production billing and subscription entitlements (not enabled)
+1. Prepare a private PostgreSQL database.
+2. Create a Google Cloud project, enable the Gmail API, keep OAuth consent in **Testing**, and add your explicitly authorized test account. Register a Web OAuth client with callback `http://localhost:3000/api/auth/callback/google`.
+3. Copy `.env.example` to `.env.local`. Set `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, and `TOKEN_ENCRYPTION_KEY`. Generate the encryption key using `openssl rand -hex 32`. Never commit secrets.
+4. Run `npm run db:push`, then `npm run dev`.
+5. Open `/connect`, sign in, and create a scan. Start with the all-attachments or PDF preset, or use an advanced Gmail query.
+6. Choose **Process 10 messages** for each batch. Progress survives reloads. An active scan must finish before another is created.
 
-## Recommended deployment architecture
-Vercel for Next.js UI and short API routes, Postgres for metadata/jobs, dedicated background worker and queue for large scans, object storage only if explicitly required. Avoid Vercel Hobby for commercial use (https://vercel.com/docs/plans/hobby).
+The schema adds lease and message-page checkpoint fields to `ScanJob`. Existing development databases need `npm run db:push` before scanning; existing attachment records are retained. There is one canonical application in the repository root.
 
-## Milestones
-1. **M0** source project + local smoke test (this repository)
-2. **M1** production worker, OAuth and privacy requirements, file filtering and download robustness
-3. **M2** bulk ZIP, Google Drive export, deduplication and resumable scheduled sync
-4. **M3** user onboarding, multi-tenant limits, observability, billing
-5. **M4** optional Inspirex ATS integration and broader storage connectors
+Missing integration configuration shows an explanation and a link to the demo. Database outages show a retry state. Live Gmail credentials are not included, and no real inbox has been used in automated testing.
 
-## GitHub publication (not done)
-Create your own **private** repo via GitHub browser or Codex. Then from project directory:
-`git init && git add . && git commit -m "feat: initial Gmail attachment indexing prototype" && git branch -M main && git remote add origin https://github.com/YOUR_ACCOUNT/inboxvault.git && git push -u origin main`
+## Workspace
 
-No GitHub credentials or repo write connection were available during creation. This project has not been pushed or deployed.
+- `/dashboard` — accurate library totals, latest scan, and recent attachment rows.
+- `/dashboard/files` — filename search, MIME filtering, pagination, metadata details, individual downloads.
+- `/dashboard/scans` — latest 20 scans and continuation of the latest active scan.
+- `/dashboard/settings` — connection details, reconnect, sign-out, and Google account access link.
+- `/demo` and the equivalent subroutes — an isolated sample workspace.
+
+Downloads fetch file contents from Gmail on demand and support files up to **15,000,000 bytes**. Larger attachments remain indexed but cannot be downloaded in this preview. Scanning uses explicit development-only batches; `next start` can serve the interface and library but does **not** enable scanning. Use `npm run dev` for controlled local Gmail testing.
+
+Tokens are encrypted with AES-256-GCM. Attachment, scan, and summary queries are scoped to the signed-in user. Scans snapshot each Gmail result page, use a database lease to exclude simultaneous batches, and transactionally checkpoint each message with its attachments. These are private-preview safeguards, not a durable production queue.
+
+## API
+
+- `GET /api/summary` — database-backed unique file count, indexed bytes, latest scan, connection summary, and scan availability.
+- `GET /api/files?search=&mime=&cursor=` — up to 50 attachment metadata records plus a continuation cursor.
+- `GET /api/files/:id/download` — authenticated on-demand download.
+- `GET /api/jobs` — latest 20 scan summaries.
+- `POST /api/jobs` with `{ "query": "has:attachment" }` — create one scan.
+- `POST /api/jobs/:id/run` — process the next batch of up to ten messages, disabled in production.
+
+File and job responses omit Gmail refresh tokens, internal page snapshots, and lease credentials. The MIME filter accepts a prefix (e.g. `image/`) or a full MIME type. “Documents & archives” matches `application/` and therefore includes PDFs.
+
+## Verification
+
+```sh
+npm test
+npm run typecheck
+npm run build
+npx playwright install chromium --only-shell
+npm run test:e2e
+```
+
+The browser suite covers the product story, mobile navigation, reduced motion, search and filters, file-detail dialogs, honest sample downloads, explicit scan batches, reload/navigation persistence, unconfigured integration behavior, and automated accessibility checks for the workspace and scan dialog. Screenshots are written to ignored `artifacts/`. A GitHub Actions workflow runs unit checks, a production build, and the browser suite. Patched transitive dependencies are pinned through npm overrides; review these when upgrading Prisma or Google APIs. Development uses `.next-dev/` and builds use `.next/` so the outputs do not conflict.
+
+For database-backed verification, install PostgreSQL locally so `initdb` and `pg_ctl` are on PATH, then run:
+
+```sh
+npm run test:integration
+```
+
+This creates a **disposable PostgreSQL cluster**, seeds two fictional tenants, and runs the browser/API suite. It checks unauthorized access, cross-account isolation, accurate totals, multiple file pages, oversized downloads, conflicting scan creation, and batch leases. It stops and removes its own test database afterward. It never uses your configured application database or calls Gmail.
+
+## Remaining production milestones
+
+This is a controlled developer preview, not a public Gmail launch. The repository’s original launch review remains applicable: confirm the actual Gmail use case and required verification against [Google Workspace API user-data policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy) and [Gmail scope documentation](https://developers.google.com/workspace/gmail/api/auth/scopes) before a public release.
+
+Remaining work includes a durable worker/queue, quotas and backoff, retention and deletion/revocation controls, monitoring, abuse prevention, file-content security, privacy/terms review, and regular dependency review. Bulk ZIP, large-file delivery, Drive exports, scheduled sync, billing, email-body parsing, and Outlook are future features. There is no public deployment configured.
